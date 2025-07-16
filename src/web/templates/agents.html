@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}TESTIA - Agents{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">
+                <i class="fas fa-robot"></i> AI Agents
+            </h2>
+            
+            <!-- Agents List -->
+            <div class="row" id="agents-list">
+                <div class="col-12">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading agents...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load agents data
+async function loadAgents() {
+    try {
+        const response = await fetch('/api/agents');
+        const agents = await response.json();
+        
+        const agentsList = document.getElementById('agents-list');
+        
+        if (agents.length === 0) {
+            agentsList.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No agents available.
+                    </div>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        agents.forEach(agent => {
+            html += `
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="fas fa-robot text-primary"></i> 
+                                ${agent.name || agent.id}
+                            </h5>
+                            <p class="card-text">
+                                <small class="text-muted">ID: ${agent.id}</small>
+                            </p>
+                            <p class="card-text">
+                                ${agent.description || 'AI Assistant ready to help with various tasks.'}
+                            </p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-success">Active</span>
+                                <button class="btn btn-sm btn-primary" onclick="chatWithAgent('${agent.id}')">
+                                    <i class="fas fa-comments"></i> Chat
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        agentsList.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error loading agents:', error);
+        document.getElementById('agents-list').innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    Error loading agents: ${error.message}
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Chat with specific agent
+function chatWithAgent(agentId) {
+    const chatUrl = `/chat?agent=${encodeURIComponent(agentId)}`;
+    window.location.href = chatUrl;
+}
+
+// Load agents when page loads
+document.addEventListener('DOMContentLoaded', loadAgents);
+</script>
+{% endblock %}

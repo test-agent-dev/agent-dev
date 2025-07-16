@@ -1,0 +1,590 @@
+"""
+Web UI for TESTIA AI Agent
+"""
+import os
+import json
+import asyncio
+from typing import@app.get("/chat", response_class=HTMLResponse)
+async def chat_page(request: Request):
+    """Chat page"""
+    agents = agent_manager.get_enabled_agents() if agent_manager else []
+    return templates.TemplateResponse("chat.html", {
+        "request": request,
+        "agents": agents
+    })
+
+
+@app.get("/advanced-chat", response_class=HTMLResponse)
+async def advanced_chat_page(request: Request):
+    """Advanced chat page with code generation and configuration"""
+    return templates.TemplateResponse("advanced_chat.html", {"request": request})
+
+
+@app.get("/agents", response_class=HTMLResponse)
+async def agents_page(request: Request):
+    """Agents management page"""
+    return templates.TemplateResponse("agents.html", {"request": request})
+
+
+@app.get("/models", response_class=HTMLResponse)
+async def models_page(request: Request):
+    """Models management page"""
+    return templates.TemplateResponse("models.html", {"request": request})tional
+from datetime import datetime
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
+import uvicorn
+
+# Absolute imports
+from src.models.manager import ModelManager
+from src.agents.manager import AgentManager
+from src.mcp.server import SimpleMCPServer as TestiaMCPServer
+
+app = FastAPI(title="TESTIA AI Agent Web UI", version="1.0.0")
+
+# Global managers
+model_manager: Optional[ModelManager] = None
+agent_manager: Optional[AgentManager] = None
+mcp_server: Optional[TestiaMCPServer] = None
+
+# WebSocket connections
+active_connections: Dict[str, WebSocket] = {}
+
+# Templates
+templates = Jinja2Templates(directory="src/web/templates")
+
+# Static files
+app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
+
+
+# Pydantic models
+class ChatMessage(BaseModel):
+    agent_id: str
+    message: str
+    conversation_id: Optional[str] = None
+    stream: bool = False
+
+
+class AgentCreate(BaseModel):
+    name: str
+    description: str
+    model_name: str
+    instructions: str
+    system_prompt: Optional[str] = None
+    temperature: float = 0.7
+    max_context_length: int = 8000
+
+
+class AgentUpdate(BaseModel):
+    instructions: Optional[str] = None
+    enabled: Optional[bool] = None
+    temperature: Optional[float] = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize the application"""
+    global model_manager, agent_manager, mcp_server
+    
+    try:
+        # Initialize model manager
+        model_manager = ModelManager()
+        await model_manager.load_models()
+        
+        # Initialize agent manager
+        agent_manager = AgentManager(model_manager)
+        await agent_manager.load_agents()
+        
+        # Initialize MCP server
+        mcp_server = TestiaMCPServer(model_manager)
+        
+        # Add agents to MCP server
+        for agent_id, agent in agent_manager.agents.items():
+            await mcp_server.add_agent(agent_id, agent)
+        
+        print("✅ TESTIA Web UI initialized successfully!")
+        
+    except Exception as e:
+        print(f"❌ Error initializing TESTIA Web UI: {e}")
+        raise
+
+
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    """Home page"""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_page(request: Request):
+    """Chat interface page"""
+    agents = agent_manager.get_enabled_agents() if agent_manager else []
+    return templates.TemplateResponse("chat.html", {
+        "request": request,
+        "agents": agents
+    })
+
+
+@app.get("/agents", response_class=HTMLResponse)
+async def agents_page(request: Request):
+    """Agents management page"""
+    return templates.TemplateResponse("agents.html", {"request": request})
+
+
+@app.get("/models", response_class=HTMLResponse)
+async def models_page(request: Request):
+    """Models management page"""
+    return templates.TemplateResponse("models.html", {"request": request})
+
+
+# API Routes
+
+@app.get("/api/status")
+async def get_status():
+    """Get system status"""
+    if not agent_manager or not model_manager:
+        raise HTTPException(status_code=503, detail="System not initialized")
+    
+    return {
+        "status": "running",
+        "agents": agent_manager.get_agent_statistics(),
+        "models": len(model_manager.get_available_models()),
+        "mcp_connections": len(mcp_server.connections) if mcp_server else 0,
+        "websocket_connections": len(active_connections)
+    }
+
+
+@app.get("/api/agents")
+async def list_agents():
+    """List all agents"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    agents_info = []
+    for agent_id, agent in agent_manager.agents.items():
+        status = agent.get_status()
+        agents_info.append(status)
+    
+    return {"agents": agents_info}
+
+
+@app.get("/api/agents/{agent_id}")
+async def get_agent(agent_id: str):
+    """Get specific agent details"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    agent = agent_manager.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    return agent.to_dict()
+
+
+@app.post("/api/agents")
+async def create_agent(agent_data: AgentCreate):
+    """Create a new agent"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    try:
+        agent = await agent_manager.create_custom_agent(
+            name=agent_data.name,
+            description=agent_data.description,
+            model_name=agent_data.model_name,
+            instructions=agent_data.instructions,
+            system_prompt=agent_data.system_prompt,
+            temperature=agent_data.temperature,
+            max_context_length=agent_data.max_context_length
+        )
+        
+        # Add to MCP server
+        if mcp_server:
+            await mcp_server.add_agent(agent_data.name, agent)
+        
+        return {"message": f"Agent {agent_data.name} created successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/agents/{agent_id}")
+async def update_agent(agent_id: str, agent_data: AgentUpdate):
+    """Update an agent"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    agent = agent_manager.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    try:
+        if agent_data.instructions is not None:
+            agent.update_instructions(agent_data.instructions)
+        
+        if agent_data.enabled is not None:
+            if agent_data.enabled:
+                agent_manager.enable_agent(agent_id)
+            else:
+                agent_manager.disable_agent(agent_id)
+        
+        if agent_data.temperature is not None:
+            agent.config.temperature = agent_data.temperature
+        
+        return {"message": f"Agent {agent_id} updated successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/agents/{agent_id}")
+async def delete_agent(agent_id: str):
+    """Delete an agent"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    if agent_id not in agent_manager.agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    try:
+        await agent_manager.remove_agent(agent_id)
+        
+        # Remove from MCP server
+        if mcp_server:
+            await mcp_server.remove_agent(agent_id)
+        
+        return {"message": f"Agent {agent_id} deleted successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/models")
+async def list_models():
+    """List all models"""
+    if not model_manager:
+        raise HTTPException(status_code=503, detail="Model manager not initialized")
+    
+    return {"models": model_manager.get_all_models_info()}
+
+
+@app.get("/api/models/{model_name}")
+async def get_model(model_name: str):
+    """Get specific model details"""
+    if not model_manager:
+        raise HTTPException(status_code=503, detail="Model manager not initialized")
+    
+    info = model_manager.get_model_info(model_name)
+    if not info:
+        raise HTTPException(status_code=404, detail="Model not found")
+    
+    return info
+
+
+@app.post("/api/chat")
+async def chat_api(message_data: ChatMessage):
+    """Send a chat message"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    try:
+        response = await agent_manager.process_message(
+            agent_id=message_data.agent_id,
+            message=message_data.message,
+            conversation_id=message_data.conversation_id
+        )
+        
+        return {
+            "response": response,
+            "agent_id": message_data.agent_id,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/conversations/{agent_id}")
+async def list_conversations(agent_id: str):
+    """List conversations for an agent"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    agent = agent_manager.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    conversations = []
+    for conv_id in agent.list_conversations():
+        conv_data = agent_manager.get_conversation_history(agent_id, conv_id)
+        if conv_data:
+            conversations.append({
+                "id": conv_id,
+                "message_count": conv_data["message_count"],
+                "created_at": conv_data["created_at"],
+                "updated_at": conv_data["updated_at"]
+            })
+    
+    return {"conversations": conversations}
+
+
+@app.get("/api/conversations/{agent_id}/{conversation_id}")
+async def get_conversation(agent_id: str, conversation_id: str):
+    """Get specific conversation"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    conv_data = agent_manager.get_conversation_history(agent_id, conversation_id)
+    if not conv_data:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    return conv_data
+
+
+@app.delete("/api/conversations/{agent_id}/{conversation_id}")
+async def delete_conversation(agent_id: str, conversation_id: str):
+    """Delete a specific conversation"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    agent = agent_manager.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    agent.clear_conversation(conversation_id)
+    return {"message": "Conversation deleted successfully"}
+
+
+# WebSocket endpoint for real-time chat
+@app.websocket("/ws/chat")
+async def websocket_chat(websocket: WebSocket):
+    """WebSocket endpoint for real-time chat"""
+    await websocket.accept()
+    
+    client_id = f"client_{len(active_connections)}"
+    active_connections[client_id] = websocket
+    
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_json()
+            
+            if data["type"] == "chat":
+                agent_id = data["agent_id"]
+                message = data["message"]
+                conversation_id = data.get("conversation_id")
+                stream = data.get("stream", False)
+                
+                if not agent_manager:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Agent manager not initialized"
+                    })
+                    continue
+                
+                try:
+                    if stream:
+                        # Stream response
+                        await websocket.send_json({
+                            "type": "stream_start",
+                            "agent_id": agent_id
+                        })
+                        
+                        response_chunks = []
+                        async for chunk in agent_manager.process_message(
+                            agent_id=agent_id,
+                            message=message,
+                            conversation_id=conversation_id,
+                            stream=True
+                        ):
+                            response_chunks.append(chunk)
+                            await websocket.send_json({
+                                "type": "stream_chunk",
+                                "chunk": chunk
+                            })
+                        
+                        await websocket.send_json({
+                            "type": "stream_end",
+                            "full_response": "".join(response_chunks)
+                        })
+                    else:
+                        # Regular response
+                        response = await agent_manager.process_message(
+                            agent_id=agent_id,
+                            message=message,
+                            conversation_id=conversation_id
+                        )
+                        
+                        await websocket.send_json({
+                            "type": "response",
+                            "response": response,
+                            "agent_id": agent_id,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        
+                except Exception as e:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e)
+                    })
+            
+            elif data["type"] == "ping":
+                await websocket.send_json({"type": "pong"})
+                
+    except WebSocketDisconnect:
+        if client_id in active_connections:
+            del active_connections[client_id]
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        if client_id in active_connections:
+            del active_connections[client_id]
+
+
+@app.post("/api/chat/stream")
+async def stream_chat(chat_data: ChatMessage):
+    """Stream chat responses"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    agent = agent_manager.get_agent(chat_data.agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    async def generate():
+        try:
+            # Prepare system prompt with custom instructions
+            system_prompt = getattr(chat_data, 'system_prompt', None)
+            
+            # Generate streaming response
+            async for chunk in agent.stream_response(
+                message=chat_data.message,
+                conversation_id=chat_data.conversation_id,
+                temperature=getattr(chat_data, 'temperature', None),
+                max_tokens=getattr(chat_data, 'max_tokens', None),
+                system_prompt=system_prompt
+            ):
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+            
+            # Send final message with conversation ID
+            yield f"data: {json.dumps({'conversation_id': chat_data.conversation_id or 'new'})}\n\n"
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    return StreamingResponse(generate(), media_type="text/plain")
+
+
+@app.get("/api/models/configure")
+async def get_model_configurations():
+    """Get detailed model configurations for admin"""
+    if not model_manager:
+        raise HTTPException(status_code=503, detail="Model manager not initialized")
+    
+    configs = {}
+    for model_name, config in model_manager.configs.items():
+        configs[model_name] = {
+            "name": config.name,
+            "provider": config.provider.value,
+            "model_id": config.model_id,
+            "max_tokens": config.max_tokens,
+            "temperature": config.temperature,
+            "context_window": config.context_window,
+            "enabled": config.enabled,
+            "instructions": config.instructions,
+            "system_prompt": config.system_prompt
+        }
+    
+    return {"models": configs}
+
+
+@app.put("/api/models/{model_name}/configure")
+async def update_model_configuration(model_name: str, config_data: dict):
+    """Update model configuration"""
+    if not model_manager:
+        raise HTTPException(status_code=503, detail="Model manager not initialized")
+    
+    if model_name not in model_manager.configs:
+        raise HTTPException(status_code=404, detail="Model not found")
+    
+    config = model_manager.configs[model_name]
+    
+    # Update allowed fields
+    if "temperature" in config_data:
+        config.temperature = float(config_data["temperature"])
+    if "max_tokens" in config_data:
+        config.max_tokens = int(config_data["max_tokens"])
+    if "enabled" in config_data:
+        config.enabled = bool(config_data["enabled"])
+    if "instructions" in config_data:
+        config.instructions = str(config_data["instructions"])
+    if "system_prompt" in config_data:
+        config.system_prompt = str(config_data["system_prompt"])
+    
+    return {"message": f"Model {model_name} configuration updated"}
+
+
+@app.post("/api/agents/{agent_id}/prompt")
+async def update_agent_prompt(agent_id: str, prompt_data: dict):
+    """Update agent's system prompt dynamically"""
+    if not agent_manager:
+        raise HTTPException(status_code=503, detail="Agent manager not initialized")
+    
+    agent = agent_manager.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    if "system_prompt" in prompt_data:
+        agent.update_system_prompt(prompt_data["system_prompt"])
+    
+    if "instructions" in prompt_data:
+        agent.update_instructions(prompt_data["instructions"])
+    
+    return {"message": f"Agent {agent_id} prompt updated"}
+
+
+@app.get("/api/code/extract")
+async def extract_code_from_text(text: str):
+    """Extract code blocks from text"""
+    import re
+    
+    # Extract code blocks
+    code_blocks = []
+    pattern = r'```(\w+)?\n(.*?)```'
+    matches = re.findall(pattern, text, re.DOTALL)
+    
+    for language, code in matches:
+        code_blocks.append({
+            "language": language or "text",
+            "code": code.strip()
+        })
+    
+    # Extract file definitions
+    files = []
+    file_pattern = r'FILE:\s*([^\n]+)\n```(\w+)?\n(.*?)```'
+    file_matches = re.findall(file_pattern, text, re.DOTALL)
+    
+    for filename, language, content in file_matches:
+        files.append({
+            "name": filename.strip(),
+            "language": language or "text",
+            "content": content.strip()
+        })
+    
+    return {
+        "code_blocks": code_blocks,
+        "files": files
+    }
+
+
+def run_web_server(host: str = "0.0.0.0", port: int = 8080):
+    """Run the web server"""
+    uvicorn.run(app, host=host, port=port)
+
+
+if __name__ == "__main__":
+    run_web_server()

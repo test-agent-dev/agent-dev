@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-robot me-2"></i>Agentes</h5>
+            </div>
+            <div class="card-body">
+                <select class="form-select mb-3" id="agent-select">
+                    <option value="">Seleccionar agente...</option>
+                    {% for agent in agents %}
+                    <option value="{{ agent }}">{{ agent }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-outline-secondary btn-sm w-100 mb-2" onclick="loadAgents()">
+                    <i class="fas fa-sync me-1"></i>Actualizar
+                </button>
+                <button class="btn btn-outline-danger btn-sm w-100" onclick="clearChat()">
+                    <i class="fas fa-trash me-1"></i>Limpiar Chat
+                </button>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-cog me-2"></i>Configuración</h6>
+            </div>
+            <div class="card-body">
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="stream-toggle">
+                    <label class="form-check-label" for="stream-toggle">
+                        Streaming
+                    </label>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="sound-toggle">
+                    <label class="form-check-label" for="sound-toggle">
+                        Sonidos
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-9">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-comments me-2"></i>Chat con IA
+                </h5>
+                <span class="badge bg-success" id="connection-status">Conectado</span>
+            </div>
+            <div class="card-body d-flex flex-column" style="height: 70vh;">
+                <div class="chat-container flex-grow-1 overflow-auto mb-3" id="chat-container">
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-robot fa-3x mb-3"></i>
+                        <p>Selecciona un agente y comienza a conversar</p>
+                    </div>
+                </div>
+                
+                <div class="input-group">
+                    <input type="text" class="form-control" id="message-input" 
+                           placeholder="Escribe tu mensaje aquí..." 
+                           disabled>
+                    <button class="btn btn-primary" type="button" id="send-button" 
+                            onclick="sendMessage()" disabled>
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                
+                <div class="mt-2">
+                    <small class="text-muted">
+                        Presiona Enter para enviar • Shift+Enter para nueva línea
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Modal -->
+<div class="modal fade" id="loadingModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+                <p class="mb-0">Enviando mensaje...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let websocket = null;
+let currentAgent = null;
+let conversationId = null;
+let isConnected = false;
+
+// Initialize WebSocket connection
+function initWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+    
+    websocket = new WebSocket(wsUrl);
+    
+    websocket.onopen = function(event) {
+        console.log('WebSocket connected');
+        isConnected = true;
+        updateConnectionStatus('Conectado', 'success');
+    };
+    
+    websocket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        handleWebSocketMessage(data);
+    };
+    
+    websocket.onclose = function(event) {
+        console.log('WebSocket disconnected');
+        isConnected = false;
+        updateConnectionStatus('Desconectado', 'danger');
+        
+        // Try to reconnect after 3 seconds
+        setTimeout(initWebSocket, 3000);
+    };
+    
+    websocket.onerror = function(error) {
+        console.error('WebSocket error:', error);
+        updateConnectionStatus('Error', 'danger');
+    };
+}
+
+function handleWebSocketMessage(data) {
+    switch (data.type) {
+        case 'response':
+            hideLoading();
+            displayMessage(data.response, 'assistant', data.agent_id);
+            break;
+            
+        case 'stream_start':
+            hideLoading();
+            startStreamingResponse(data.agent_id);
+            break;
+            
+        case 'stream_chunk':
+            appendToStreamingResponse(data.chunk);
+            break;
+            
+        case 'stream_end':
+            endStreamingResponse();
+            break;
+            
+        case 'error':
+            hideLoading();
+            displayMessage(`Error: ${data.message}`, 'error');
+            break;
+            
+        case 'pong':
+            // Handle ping/pong for connection keepalive
+            break;
+    }
+}
+
+function updateConnectionStatus(status, type) {
+    const badge = document.getElementById('connection-status');
+    badge.textContent = status;
+    badge.className = `badge bg-${type}`;
+}
+
+function loadAgents() {
+    fetch('/api/agents')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('agent-select');
+            select.innerHTML = '<option value="">Seleccionar agente...</option>';
+            
+            data.agents.forEach(agent => {
+                if (agent.enabled) {
+                    const option = document.createElement('option');
+                    option.value = agent.name;
+                    option.textContent = `${agent.name} (${agent.model})`;
+                    select.appendChild(option);
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading agents:', error);
+            displayMessage('Error cargando agentes', 'error');
+        });
+}
+
+function onAgentChange() {
+    const select = document.getElementById('agent-select');
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    
+    if (select.value) {
+        currentAgent = select.value;
+        messageInput.disabled = false;
+        sendButton.disabled = false;
+        messageInput.focus();
+        
+        // Clear chat when switching agents
+        clearChat();
+        displayMessage(`Conectado con ${currentAgent}`, 'system');
+    } else {
+        currentAgent = null;
+        messageInput.disabled = true;
+        sendButton.disabled = true;
+    }
+}
+
+function sendMessage() {
+    const messageInput = document.getElementById('message-input');
+    const message = messageInput.value.trim();
+    
+    if (!message || !currentAgent || !isConnected) {
+        return;
+    }
+    
+    // Display user message
+    displayMessage(message, 'user');
+    
+    // Clear input
+    messageInput.value = '';
+    
+    // Show loading
+    showLoading();
+    
+    // Send via WebSocket
+    const data = {
+        type: 'chat',
+        agent_id: currentAgent,
+        message: message,
+        conversation_id: conversationId,
+        stream: document.getElementById('stream-toggle').checked
+    };
+    
+    websocket.send(JSON.stringify(data));
+}
+
+function displayMessage(message, role, agentName = null) {
+    const chatContainer = document.getElementById('chat-container');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${role}`;
+    
+    let iconClass, badgeClass, senderName;
+    
+    switch (role) {
+        case 'user':
+            iconClass = 'fas fa-user';
+            badgeClass = 'bg-primary';
+            senderName = 'Tú';
+            break;
+        case 'assistant':
+            iconClass = 'fas fa-robot';
+            badgeClass = 'bg-success';
+            senderName = agentName || currentAgent || 'Asistente';
+            break;
+        case 'system':
+            iconClass = 'fas fa-info-circle';
+            badgeClass = 'bg-info';
+            senderName = 'Sistema';
+            break;
+        case 'error':
+            iconClass = 'fas fa-exclamation-triangle';
+            badgeClass = 'bg-danger';
+            senderName = 'Error';
+            break;
+    }
+    
+    messageDiv.innerHTML = `
+        <div class="d-flex mb-3">
+            <div class="flex-shrink-0">
+                <span class="badge ${badgeClass} rounded-pill p-2">
+                    <i class="${iconClass}"></i>
+                </span>
+            </div>
+            <div class="flex-grow-1 ms-3">
+                <div class="fw-bold mb-1">${senderName}</div>
+                <div class="message-content">${formatMessage(message)}</div>
+                <small class="text-muted">${new Date().toLocaleTimeString()}</small>
+            </div>
+        </div>
+    `;
+    
+    chatContainer.appendChild(messageDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Remove welcome message if present
+    const welcomeMsg = chatContainer.querySelector('.text-center.text-muted');
+    if (welcomeMsg) {
+        welcomeMsg.remove();
+    }
+}
+
+function formatMessage(message) {
+    // Basic markdown-like formatting
+    return message
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
+}
+
+let streamingMessageDiv = null;
+
+function startStreamingResponse(agentName) {
+    const chatContainer = document.getElementById('chat-container');
+    
+    streamingMessageDiv = document.createElement('div');
+    streamingMessageDiv.className = 'message assistant';
+    streamingMessageDiv.innerHTML = `
+        <div class="d-flex mb-3">
+            <div class="flex-shrink-0">
+                <span class="badge bg-success rounded-pill p-2">
+                    <i class="fas fa-robot"></i>
+                </span>
+            </div>
+            <div class="flex-grow-1 ms-3">
+                <div class="fw-bold mb-1">${agentName}</div>
+                <div class="message-content streaming"></div>
+                <small class="text-muted">${new Date().toLocaleTimeString()}</small>
+            </div>
+        </div>
+    `;
+    
+    chatContainer.appendChild(streamingMessageDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function appendToStreamingResponse(chunk) {
+    if (streamingMessageDiv) {
+        const contentDiv = streamingMessageDiv.querySelector('.message-content');
+        contentDiv.textContent += chunk;
+        
+        const chatContainer = document.getElementById('chat-container');
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+}
+
+function endStreamingResponse() {
+    if (streamingMessageDiv) {
+        const contentDiv = streamingMessageDiv.querySelector('.message-content');
+        contentDiv.className = 'message-content';
+        contentDiv.innerHTML = formatMessage(contentDiv.textContent);
+        streamingMessageDiv = null;
+    }
+}
+
+function clearChat() {
+    const chatContainer = document.getElementById('chat-container');
+    chatContainer.innerHTML = `
+        <div class="text-center text-muted py-5">
+            <i class="fas fa-robot fa-3x mb-3"></i>
+            <p>Conversación limpia. Puedes empezar de nuevo.</p>
+        </div>
+    `;
+    conversationId = null;
+}
+
+function showLoading() {
+    const modal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    modal.show();
+}
+
+function hideLoading() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('loadingModal'));
+    if (modal) {
+        modal.hide();
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    initWebSocket();
+    loadAgents();
+    
+    // Agent selection change
+    document.getElementById('agent-select').addEventListener('change', onAgentChange);
+    
+    // Message input handling
+    const messageInput = document.getElementById('message-input');
+    messageInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    // Keep connection alive
+    setInterval(() => {
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+            websocket.send(JSON.stringify({type: 'ping'}));
+        }
+    }, 30000);
+});
+</script>
+{% endblock %}

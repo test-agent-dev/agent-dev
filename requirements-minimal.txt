@@ -1,0 +1,33 @@
+# Minimal requirements for basic functionality
+# Use this if the full requirements.txt fails
+
+# Core web framework
+fastapi>=0.100.0
+uvicorn>=0.20.0
+pydantic>=2.0.0
+
+# HTTP client
+httpx>=0.25.0
+
+# WebSocket support
+websockets>=11.0.0
+
+# OpenAI (Azure compatible)
+openai>=1.10.0
+
+# Basic utilities
+python-dotenv>=1.0.0
+click>=8.0.0
+rich>=13.0.0
+
+# Async support
+aiofiles>=23.0.0
+
+# Templates
+jinja2>=3.1.0
+
+# JSON Web Tokens
+PyJWT>=2.0.0
+
+# YAML support
+pyyaml>=6.0.0

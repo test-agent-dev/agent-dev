@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}TESTIA - AI Models{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">
+                <i class="fas fa-brain"></i> AI Models
+            </h2>
+            
+            <!-- Models List -->
+            <div class="row" id="models-list">
+                <div class="col-12">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading models...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load models data
+async function loadModels() {
+    try {
+        const response = await fetch('/api/models');
+        const models = await response.json();
+        
+        const modelsList = document.getElementById('models-list');
+        
+        if (models.length === 0) {
+            modelsList.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No models available.
+                    </div>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        models.forEach(model => {
+            const isAzure = model.includes('azure');
+            const providerIcon = isAzure ? 'fas fa-cloud' : 'fas fa-robot';
+            const providerColor = isAzure ? 'text-info' : 'text-success';
+            const providerName = isAzure ? 'Azure OpenAI' : 'OpenAI';
+            
+            html += `
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                <i class="${providerIcon} ${providerColor}"></i> 
+                                ${model}
+                            </h5>
+                            <p class="card-text">
+                                <span class="badge bg-secondary">${providerName}</span>
+                            </p>
+                            <p class="card-text">
+                                <small class="text-muted">
+                                    ${getModelDescription(model)}
+                                </small>
+                            </p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-success">
+                                    <i class="fas fa-check-circle"></i> Available
+                                </span>
+                                <button class="btn btn-sm btn-primary" onclick="testModel('${model}')">
+                                    <i class="fas fa-play"></i> Test
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        modelsList.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error loading models:', error);
+        document.getElementById('models-list').innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    Error loading models: ${error.message}
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Get model description
+function getModelDescription(model) {
+    const descriptions = {
+        'gpt-4.1-azure': 'Advanced Azure OpenAI model with enhanced capabilities',
+        'gpt-4': 'OpenAI\'s most capable model for complex tasks',
+        'gpt-3.5-turbo': 'Fast and efficient model for general tasks',
+        'claude-3-sonnet': 'Anthropic\'s balanced model for reasoning',
+        'claude-3-haiku': 'Fast Anthropic model for quick responses'
+    };
+    
+    return descriptions[model] || 'AI language model for various tasks';
+}
+
+// Test model
+async function testModel(modelId) {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    button.disabled = true;
+    
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: 'Hello! Please respond with just "Model test successful" to confirm you are working.',
+                model: modelId,
+                agent_id: 'general-assistant'
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            alert(`✅ Model test successful!\n\nResponse: ${data.response}`);
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Error testing model:', error);
+        alert(`❌ Model test failed: ${error.message}`);
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// Load models when page loads
+document.addEventListener('DOMContentLoaded', loadModels);
+</script>
+{% endblock %}

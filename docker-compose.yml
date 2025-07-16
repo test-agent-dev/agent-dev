@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  testia-agent:
+    build: .
+    container_name: testia-agent
+    ports:
+      - "8080:8080"  # Web UI
+      - "3000:3000"  # MCP Server
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./src:/app/src
+    environment:
+      - PYTHONPATH=/app
+      - MCP_PORT=3000
+      - WEB_PORT=8080
+      - LOG_LEVEL=INFO
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - testia-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: testia-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - testia-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: testia-postgres
+    environment:
+      POSTGRES_DB: testia
+      POSTGRES_USER: testia
+      POSTGRES_PASSWORD: testia_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - testia-network
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
+  testia-network:
+    driver: bridge

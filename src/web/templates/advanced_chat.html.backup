@@ -1,0 +1,861 @@
+{% extends "base.html" %}
+
+{% block title %}TESTIA - Advanced Chat{% endblock %}
+
+{% block content %}
+<div class="container-fluid vh-100">
+    <div class="row h-100">
+        <!-- Panel de Configuración Lateral -->
+        <div class="col-xl-2 col-lg-3 col-md-4 d-none d-md-block bg-light border-end">
+            <div class="h-100 overflow-auto p-3">
+                <!-- Selector de Agente -->
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-3">
+                        <i class="fas fa-robot text-primary"></i> Agente
+                    </h6>
+                    <select class="form-select form-select-sm" id="agent-select">
+                        <option value="">Seleccionar agente...</option>
+                    </select>
+                </div>
+
+                <!-- Selector de Modelo -->
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-3">
+                        <i class="fas fa-brain text-info"></i> Modelo
+                    </h6>
+                    <select class="form-select form-select-sm" id="model-select">
+                        <option value="">Auto (por agente)</option>
+                    </select>
+                </div>
+
+                <!-- Configuración de Parámetros -->
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-3">
+                        <i class="fas fa-sliders-h text-warning"></i> Parámetros
+                    </h6>
+                    
+                    <div class="mb-3">
+                        <label for="temperature-slider" class="form-label small">
+                            Temperature: <span id="temperature-value">0.7</span>
+                        </label>
+                        <input type="range" class="form-range" id="temperature-slider" 
+                               min="0" max="1" step="0.1" value="0.7">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="max-tokens-slider" class="form-label small">
+                            Max Tokens: <span id="max-tokens-value">4000</span>
+                        </label>
+                        <input type="range" class="form-range" id="max-tokens-slider" 
+                               min="100" max="8000" step="100" value="4000">
+                    </div>
+                </div>
+
+                <!-- Configuración de Chat -->
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-3">
+                        <i class="fas fa-cog text-secondary"></i> Chat
+                    </h6>
+                    
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="stream-toggle" checked>
+                        <label class="form-check-label small" for="stream-toggle">
+                            Streaming
+                        </label>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="code-mode-toggle" checked>
+                        <label class="form-check-label small" for="code-mode-toggle">
+                            Modo Código
+                        </label>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="auto-execute-toggle">
+                        <label class="form-check-label small" for="auto-execute-toggle">
+                            Auto-ejecutar
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Prompt Personalizado -->
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-3">
+                        <i class="fas fa-edit text-success"></i> Prompt Custom
+                    </h6>
+                    <textarea class="form-control form-control-sm" id="custom-prompt" 
+                              rows="4" placeholder="Instrucciones adicionales..."></textarea>
+                    <button class="btn btn-outline-success btn-sm w-100 mt-2" onclick="applyCustomPrompt()">
+                        <i class="fas fa-check"></i> Aplicar
+                    </button>
+                </div>
+
+                <!-- Acciones Rápidas -->
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-3">
+                        <i class="fas fa-bolt text-danger"></i> Acciones
+                    </h6>
+                    <button class="btn btn-outline-danger btn-sm w-100 mb-2" onclick="clearChat()">
+                        <i class="fas fa-trash"></i> Limpiar Chat
+                    </button>
+                    <button class="btn btn-outline-info btn-sm w-100 mb-2" onclick="exportCode()">
+                        <i class="fas fa-download"></i> Exportar Código
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm w-100" onclick="saveSession()">
+                        <i class="fas fa-save"></i> Guardar Sesión
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Principal de Chat -->
+        <div class="col-xl-6 col-lg-5 col-md-8 d-flex flex-column">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center py-2">
+                    <h6 class="mb-0">
+                        <i class="fas fa-comments text-primary"></i> 
+                        Chat - <span id="active-agent">No agent selected</span>
+                    </h6>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary d-md-none" 
+                                onclick="toggleSidebar()">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card-body d-flex flex-column p-0">
+                    <!-- Área de Mensajes -->
+                    <div class="flex-grow-1 overflow-auto p-3" id="chat-messages" style="max-height: calc(100vh - 200px);">
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-robot fa-3x mb-3"></i>
+                            <p>Selecciona un agente y comienza a chatear</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Input de Mensaje -->
+                    <div class="border-top p-3">
+                        <div class="input-group">
+                            <textarea class="form-control" id="message-input" 
+                                      rows="2" placeholder="Escribe tu mensaje..." 
+                                      onkeydown="handleKeyDown(event)"></textarea>
+                            <button class="btn btn-primary" id="send-button" 
+                                    onclick="sendMessage()" disabled>
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="mt-2 d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <span id="status-indicator">●</span> 
+                                <span id="status-text">Listo</span>
+                            </small>
+                            <small class="text-muted">
+                                Tokens: <span id="token-count">0</span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de Código y Archivos -->
+        <div class="col-xl-4 col-lg-4 d-none d-lg-block">
+            <div class="card h-100">
+                <div class="card-header py-2">
+                    <ul class="nav nav-tabs card-header-tabs" id="code-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active small" id="code-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#code-panel" type="button" role="tab">
+                                <i class="fas fa-code"></i> Código
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link small" id="files-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#files-panel" type="button" role="tab">
+                                <i class="fas fa-folder"></i> Archivos
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link small" id="preview-tab" data-bs-toggle="tab" 
+                                    data-bs-target="#preview-panel" type="button" role="tab">
+                                <i class="fas fa-eye"></i> Preview
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="card-body p-0">
+                    <div class="tab-content h-100" id="code-tab-content">
+                        <!-- Panel de Código -->
+                        <div class="tab-pane fade show active h-100" id="code-panel" role="tabpanel">
+                            <div class="h-100 d-flex flex-column">
+                                <div class="p-2 border-bottom d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center">
+                                        <select class="form-select form-select-sm me-2" id="language-select" style="width: auto;">
+                                            <option value="javascript">JavaScript</option>
+                                            <option value="python">Python</option>
+                                            <option value="html">HTML</option>
+                                            <option value="css">CSS</option>
+                                            <option value="json">JSON</option>
+                                            <option value="yaml">YAML</option>
+                                        </select>
+                                        <span class="badge bg-secondary small" id="code-lines">0 líneas</span>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-sm btn-outline-primary me-1" onclick="copyCode()">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success me-1" onclick="runCode()">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning" onclick="saveCodeToFile()">
+                                            <i class="fas fa-save"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <textarea class="form-control h-100 font-monospace border-0" 
+                                              id="code-editor" 
+                                              placeholder="El código generado aparecerá aquí..."
+                                              style="resize: none; font-size: 12px; line-height: 1.4;"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Panel de Archivos -->
+                        <div class="tab-pane fade h-100" id="files-panel" role="tabpanel">
+                            <div class="h-100 d-flex flex-column">
+                                <div class="p-2 border-bottom">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">Archivos Generados</h6>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="createNewFile()">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1 overflow-auto" id="files-list">
+                                    <div class="text-center text-muted py-4">
+                                        <i class="fas fa-folder-open fa-2x mb-2"></i>
+                                        <p class="small">No hay archivos generados</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Panel de Preview -->
+                        <div class="tab-pane fade h-100" id="preview-panel" role="tabpanel">
+                            <div class="h-100 d-flex flex-column">
+                                <div class="p-2 border-bottom">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">Vista Previa</h6>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="refreshPreview()">
+                                            <i class="fas fa-sync"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="flex-grow-1" id="preview-content">
+                                    <iframe id="preview-frame" class="w-100 h-100 border-0" 
+                                            srcdoc="<div style='padding: 20px; text-align: center; color: #666;'>
+                                                    <i class='fas fa-eye fa-2x'></i>
+                                                    <p>La vista previa aparecerá aquí</p>
+                                                    </div>"></iframe>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Configuración Avanzada -->
+<div class="modal fade" id="configModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cogs"></i> Configuración Avanzada
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Modelos Disponibles</h6>
+                        <div id="models-config"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Prompts del Sistema</h6>
+                        <div id="prompts-config"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="saveAdvancedConfig()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Variables globales
+let currentAgent = null;
+let currentModel = null;
+let conversationId = null;
+let generatedFiles = {};
+let isStreaming = false;
+
+// Inicialización
+document.addEventListener('DOMContentLoaded', function() {
+    loadAgents();
+    loadModels();
+    initializeEventListeners();
+    updateStatus('Listo');
+});
+
+// Cargar agentes
+async function loadAgents() {
+    try {
+        const response = await fetch('/api/agents');
+        const data = await response.json();
+        
+        const select = document.getElementById('agent-select');
+        select.innerHTML = '<option value="">Seleccionar agente...</option>';
+        
+        data.agents.forEach(agent => {
+            const option = document.createElement('option');
+            option.value = agent.name;
+            option.textContent = agent.name;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading agents:', error);
+        showNotification('Error cargando agentes', 'error');
+    }
+}
+
+// Cargar modelos
+async function loadModels() {
+    try {
+        const response = await fetch('/api/models');
+        const data = await response.json();
+        
+        const select = document.getElementById('model-select');
+        select.innerHTML = '<option value="">Auto (por agente)</option>';
+        
+        Object.keys(data.models).forEach(modelName => {
+            const option = document.createElement('option');
+            option.value = modelName;
+            option.textContent = modelName;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading models:', error);
+        showNotification('Error cargando modelos', 'error');
+    }
+}
+
+// Manejar selección de agente
+document.getElementById('agent-select').addEventListener('change', function() {
+    currentAgent = this.value;
+    document.getElementById('active-agent').textContent = this.value || 'No agent selected';
+    document.getElementById('send-button').disabled = !this.value;
+    
+    if (this.value) {
+        updateStatus('Agente seleccionado: ' + this.value);
+    }
+});
+
+// Manejar selección de modelo
+document.getElementById('model-select').addEventListener('change', function() {
+    currentModel = this.value;
+});
+
+// Inicializar event listeners
+function initializeEventListeners() {
+    // Sliders de parámetros
+    document.getElementById('temperature-slider').addEventListener('input', function() {
+        document.getElementById('temperature-value').textContent = this.value;
+    });
+    
+    document.getElementById('max-tokens-slider').addEventListener('input', function() {
+        document.getElementById('max-tokens-value').textContent = this.value;
+    });
+    
+    // Auto-resize del textarea
+    const messageInput = document.getElementById('message-input');
+    messageInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        updateTokenCount();
+    });
+}
+
+// Manejar teclas
+function handleKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
+// Enviar mensaje
+async function sendMessage() {
+    const messageInput = document.getElementById('message-input');
+    const message = messageInput.value.trim();
+    
+    if (!message || !currentAgent) return;
+    
+    // Agregar mensaje del usuario
+    addMessage('user', message);
+    messageInput.value = '';
+    messageInput.style.height = 'auto';
+    
+    // Configurar parámetros
+    const temperature = parseFloat(document.getElementById('temperature-slider').value);
+    const maxTokens = parseInt(document.getElementById('max-tokens-slider').value);
+    const streamMode = document.getElementById('stream-toggle').checked;
+    const codeMode = document.getElementById('code-mode-toggle').checked;
+    
+    // Preparar datos
+    const requestData = {
+        agent_id: currentAgent,
+        message: message,
+        conversation_id: conversationId,
+        stream: streamMode,
+        temperature: temperature,
+        max_tokens: maxTokens
+    };
+    
+    if (currentModel) {
+        requestData.model = currentModel;
+    }
+    
+    // Agregar prompt personalizado si existe
+    const customPrompt = document.getElementById('custom-prompt').value.trim();
+    if (customPrompt && codeMode) {
+        requestData.system_prompt = customPrompt + "\n\nIMPORTANTE: Cuando generes código, formatea la respuesta así:\n```language\n[código]\n```\n\nPara archivos nuevos usa:\nFILE: nombre_archivo.ext\n```language\n[contenido]\n```";
+    }
+    
+    updateStatus('Enviando mensaje...');
+    
+    try {
+        if (streamMode) {
+            await sendStreamMessage(requestData);
+        } else {
+            await sendRegularMessage(requestData);
+        }
+    } catch (error) {
+        console.error('Error sending message:', error);
+        addMessage('error', 'Error enviando mensaje: ' + error.message);
+        updateStatus('Error');
+    }
+}
+
+// Enviar mensaje regular
+async function sendRegularMessage(requestData) {
+    const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData)
+    });
+    
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    conversationId = data.conversation_id;
+    
+    // Procesar respuesta
+    processResponse(data.response);
+    updateStatus('Listo');
+}
+
+// Enviar mensaje con streaming
+async function sendStreamMessage(requestData) {
+    const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData)
+    });
+    
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let assistantMessage = addMessage('assistant', '');
+    let fullResponse = '';
+    
+    isStreaming = true;
+    updateStatus('Recibiendo respuesta...');
+    
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (data.content) {
+                            fullResponse += data.content;
+                            updateMessageContent(assistantMessage, fullResponse);
+                        }
+                        if (data.conversation_id) {
+                            conversationId = data.conversation_id;
+                        }
+                    } catch (e) {
+                        // Ignorar errores de parsing JSON
+                    }
+                }
+            }
+        }
+    } finally {
+        isStreaming = false;
+        processResponse(fullResponse);
+        updateStatus('Listo');
+    }
+}
+
+// Procesar respuesta para extraer código
+function processResponse(response) {
+    const codeMode = document.getElementById('code-mode-toggle').checked;
+    if (!codeMode) return;
+    
+    // Extraer bloques de código
+    const codeBlocks = extractCodeBlocks(response);
+    if (codeBlocks.length > 0) {
+        // Mostrar el primer bloque en el editor
+        const firstBlock = codeBlocks[0];
+        document.getElementById('code-editor').value = firstBlock.code;
+        document.getElementById('language-select').value = firstBlock.language;
+        updateCodeLines();
+        
+        // Activar tab de código
+        document.getElementById('code-tab').click();
+    }
+    
+    // Extraer archivos
+    const files = extractFiles(response);
+    files.forEach(file => {
+        addGeneratedFile(file.name, file.content, file.language);
+    });
+}
+
+// Extraer bloques de código
+function extractCodeBlocks(text) {
+    const blocks = [];
+    const regex = /```(\w+)?\n([\s\S]*?)```/g;
+    let match;
+    
+    while ((match = regex.exec(text)) !== null) {
+        blocks.push({
+            language: match[1] || 'text',
+            code: match[2].trim()
+        });
+    }
+    
+    return blocks;
+}
+
+// Extraer archivos
+function extractFiles(text) {
+    const files = [];
+    const regex = /FILE:\s*([^\n]+)\n```(\w+)?\n([\s\S]*?)```/g;
+    let match;
+    
+    while ((match = regex.exec(text)) !== null) {
+        files.push({
+            name: match[1].trim(),
+            language: match[2] || 'text',
+            content: match[3].trim()
+        });
+    }
+    
+    return files;
+}
+
+// Agregar mensaje al chat
+function addMessage(role, content) {
+    const messagesContainer = document.getElementById('chat-messages');
+    const messageElement = document.createElement('div');
+    messageElement.className = `message mb-3 ${role}`;
+    
+    const roleIcon = role === 'user' ? 'fas fa-user' : 
+                     role === 'assistant' ? 'fas fa-robot' : 'fas fa-exclamation-triangle';
+    const roleColor = role === 'user' ? 'primary' : 
+                      role === 'assistant' ? 'success' : 'danger';
+    
+    messageElement.innerHTML = `
+        <div class="d-flex">
+            <div class="me-2">
+                <div class="rounded-circle bg-${roleColor} text-white d-flex align-items-center justify-content-center" 
+                     style="width: 32px; height: 32px;">
+                    <i class="${roleIcon} fa-sm"></i>
+                </div>
+            </div>
+            <div class="flex-grow-1">
+                <div class="message-content bg-light rounded p-2">
+                    ${formatMessage(content)}
+                </div>
+                <small class="text-muted">${new Date().toLocaleTimeString()}</small>
+            </div>
+        </div>
+    `;
+    
+    messagesContainer.appendChild(messageElement);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    return messageElement;
+}
+
+// Actualizar contenido del mensaje
+function updateMessageContent(messageElement, content) {
+    const contentElement = messageElement.querySelector('.message-content');
+    contentElement.innerHTML = formatMessage(content);
+    
+    const messagesContainer = document.getElementById('chat-messages');
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// Formatear mensaje (markdown básico)
+function formatMessage(content) {
+    return content
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
+}
+
+// Funciones de utilidad
+function updateStatus(status) {
+    document.getElementById('status-text').textContent = status;
+    const indicator = document.getElementById('status-indicator');
+    
+    if (status.includes('Error')) {
+        indicator.style.color = '#dc3545';
+    } else if (status.includes('Enviando') || status.includes('Recibiendo')) {
+        indicator.style.color = '#ffc107';
+    } else {
+        indicator.style.color = '#28a745';
+    }
+}
+
+function updateTokenCount() {
+    const content = document.getElementById('message-input').value;
+    const estimate = Math.ceil(content.length / 4); // Estimación simple
+    document.getElementById('token-count').textContent = estimate;
+}
+
+function updateCodeLines() {
+    const code = document.getElementById('code-editor').value;
+    const lines = code.split('\n').length;
+    document.getElementById('code-lines').textContent = `${lines} líneas`;
+}
+
+function clearChat() {
+    document.getElementById('chat-messages').innerHTML = `
+        <div class="text-center text-muted py-5">
+            <i class="fas fa-robot fa-3x mb-3"></i>
+            <p>Selecciona un agente y comienza a chatear</p>
+        </div>
+    `;
+    conversationId = null;
+    updateStatus('Chat limpiado');
+}
+
+function copyCode() {
+    const code = document.getElementById('code-editor').value;
+    navigator.clipboard.writeText(code).then(() => {
+        showNotification('Código copiado al portapapeles', 'success');
+    });
+}
+
+function showNotification(message, type = 'info') {
+    // Implementar notificaciones toast
+    console.log(`${type.toUpperCase()}: ${message}`);
+}
+
+// Funciones para archivos generados
+function addGeneratedFile(name, content, language) {
+    generatedFiles[name] = { content, language };
+    updateFilesList();
+}
+
+function updateFilesList() {
+    const container = document.getElementById('files-list');
+    const files = Object.keys(generatedFiles);
+    
+    if (files.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-folder-open fa-2x mb-2"></i>
+                <p class="small">No hay archivos generados</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = files.map(fileName => `
+        <div class="file-item p-2 border-bottom cursor-pointer" onclick="openFile('${fileName}')">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-file-code text-primary me-2"></i>
+                    <span class="small">${fileName}</span>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="downloadFile('${fileName}', event)">
+                        <i class="fas fa-download fa-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openFile(fileName) {
+    const file = generatedFiles[fileName];
+    if (file) {
+        document.getElementById('code-editor').value = file.content;
+        document.getElementById('language-select').value = file.language;
+        updateCodeLines();
+        document.getElementById('code-tab').click();
+    }
+}
+
+function downloadFile(fileName, event) {
+    event.stopPropagation();
+    const file = generatedFiles[fileName];
+    if (file) {
+        const blob = new Blob([file.content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+}
+
+// Placeholder functions
+function applyCustomPrompt() {
+    showNotification('Prompt personalizado aplicado', 'success');
+}
+
+function exportCode() {
+    const code = document.getElementById('code-editor').value;
+    if (code) {
+        const blob = new Blob([code], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'generated_code.txt';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+}
+
+function saveSession() {
+    showNotification('Sesión guardada', 'success');
+}
+
+function runCode() {
+    showNotification('Funcionalidad de ejecución en desarrollo', 'info');
+}
+
+function saveCodeToFile() {
+    const fileName = prompt('Nombre del archivo:');
+    if (fileName) {
+        const code = document.getElementById('code-editor').value;
+        const language = document.getElementById('language-select').value;
+        addGeneratedFile(fileName, code, language);
+        showNotification(`Archivo ${fileName} guardado`, 'success');
+    }
+}
+
+function createNewFile() {
+    const fileName = prompt('Nombre del nuevo archivo:');
+    if (fileName) {
+        addGeneratedFile(fileName, '', 'text');
+        openFile(fileName);
+    }
+}
+
+function refreshPreview() {
+    // Implementar vista previa
+    showNotification('Preview actualizado', 'success');
+}
+
+function toggleSidebar() {
+    // Implementar toggle para móviles
+}
+
+function saveAdvancedConfig() {
+    // Implementar configuración avanzada
+    showNotification('Configuración guardada', 'success');
+}
+</script>
+
+<style>
+.message { 
+    transition: all 0.3s ease; 
+}
+
+.message:hover { 
+    background-color: rgba(0,0,0,0.02); 
+}
+
+.file-item:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+#code-editor {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.nav-tabs .nav-link {
+    font-size: 0.875rem;
+    padding: 0.5rem 0.75rem;
+}
+
+.form-range::-webkit-slider-thumb {
+    background-color: #0d6efd;
+}
+
+.form-range::-moz-range-thumb {
+    background-color: #0d6efd;
+    border: none;
+}
+
+@media (max-width: 768px) {
+    .col-xl-2, .col-lg-3, .col-md-4 {
+        position: fixed;
+        top: 0;
+        left: -100%;
+        width: 280px;
+        height: 100vh;
+        z-index: 1050;
+        transition: left 0.3s ease;
+        background: white;
+    }
+    
+    .col-xl-2.show, .col-lg-3.show, .col-md-4.show {
+        left: 0;
+    }
+}
+</style>
+{% endblock %}

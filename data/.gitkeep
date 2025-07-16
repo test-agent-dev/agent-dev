@@ -1,0 +1,6 @@
+# Data directory
+# This directory contains persistent application data
+
+conversations/
+models/
+cache/

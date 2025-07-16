@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero-section text-center py-5 mb-5">
+    <div class="container">
+        <h1 class="display-4 text-primary mb-4">
+            <i class="fas fa-robot me-3"></i>TESTIA AI Agent
+        </h1>
+        <p class="lead mb-4">
+            Agente de IA personalizado con soporte completo para MCP (Model Context Protocol)
+        </p>
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h5 class="card-title">🚀 Características Principales</h5>
+                        <ul class="list-unstyled text-start">
+                            <li class="mb-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                                Agentes de IA intercambiables y configurables
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                                Soporte completo para MCP (Model Context Protocol)
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                                Múltiples interfaces: CLI, Web UI, API REST
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                                Dockerizado para fácil despliegue
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                                Modelos custom de OpenAI, Anthropic, HuggingFace
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <a href="/chat" class="btn btn-primary btn-lg me-3">
+                <i class="fas fa-comments me-2"></i>Iniciar Chat
+            </a>
+            <a href="/agents" class="btn btn-outline-primary btn-lg">
+                <i class="fas fa-robot me-2"></i>Gestionar Agentes
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body text-center">
+                <i class="fas fa-comments fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Chat Inteligente</h5>
+                <p class="card-text">
+                    Conversa con agentes de IA especializados usando una interfaz moderna y responsive.
+                </p>
+                <a href="/chat" class="btn btn-primary">Empezar Chat</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body text-center">
+                <i class="fas fa-robot fa-3x text-success mb-3"></i>
+                <h5 class="card-title">Agentes Personalizados</h5>
+                <p class="card-text">
+                    Crea y configura agentes de IA con instrucciones y comportamientos específicos.
+                </p>
+                <a href="/agents" class="btn btn-success">Gestionar Agentes</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body text-center">
+                <i class="fas fa-brain fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">Modelos IA</h5>
+                <p class="card-text">
+                    Configura y utiliza diferentes modelos de IA de múltiples proveedores.
+                </p>
+                <a href="/models" class="btn btn-warning">Ver Modelos</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-info-circle me-2"></i>Estado del Sistema
+                </h5>
+                <div class="row" id="system-status">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h6>Agentes Activos</h6>
+                            <span class="badge bg-primary fs-6" id="active-agents">-</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h6>Modelos Disponibles</h6>
+                            <span class="badge bg-success fs-6" id="available-models">-</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h6>Conexiones MCP</h6>
+                            <span class="badge bg-info fs-6" id="mcp-connections">-</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h6>Estado</h6>
+                            <span class="badge bg-success fs-6" id="system-status-badge">Activo</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function updateSystemStatus() {
+    try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        
+        document.getElementById('active-agents').textContent = data.agents.enabled_agents;
+        document.getElementById('available-models').textContent = data.models;
+        document.getElementById('mcp-connections').textContent = data.mcp_connections;
+        document.getElementById('system-status-badge').textContent = 'Activo';
+        document.getElementById('system-status-badge').className = 'badge bg-success fs-6';
+    } catch (error) {
+        console.error('Error fetching system status:', error);
+        document.getElementById('system-status-badge').textContent = 'Error';
+        document.getElementById('system-status-badge').className = 'badge bg-danger fs-6';
+    }
+}
+
+// Update status on page load
+document.addEventListener('DOMContentLoaded', updateSystemStatus);
+
+// Update status every 30 seconds
+setInterval(updateSystemStatus, 30000);
+</script>
+{% endblock %}

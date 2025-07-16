@@ -1,0 +1,59 @@
+{
+  "mcp_server": {
+    "host": "0.0.0.0",
+    "port": 3000,
+    "enable_cors": true,
+    "max_connections": 100,
+    "heartbeat_interval": 30
+  },
+  "external_servers": [
+    {
+      "name": "vscode-mcp",
+      "url": "ws://localhost:3001",
+      "description": "VS Code MCP Integration",
+      "enabled": false,
+      "auth_token": null
+    },
+    {
+      "name": "github-mcp",
+      "url": "ws://localhost:3002", 
+      "description": "GitHub MCP Integration",
+      "enabled": false,
+      "auth_token": "${GITHUB_MCP_TOKEN}"
+    },
+    {
+      "name": "filesystem-mcp",
+      "url": "ws://localhost:3003",
+      "description": "Filesystem MCP Server",
+      "enabled": false,
+      "auth_token": null
+    }
+  ],
+  "tools": {
+    "enabled": [
+      "chat",
+      "list_agents",
+      "get_agent_config",
+      "update_agent_instructions"
+    ],
+    "permissions": {
+      "chat": ["read", "write"],
+      "list_agents": ["read"],
+      "get_agent_config": ["read"],
+      "update_agent_instructions": ["write"]
+    }
+  },
+  "security": {
+    "require_auth": false,
+    "allowed_origins": ["*"],
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_minute": 60
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "json",
+    "file": "logs/mcp.log"
+  }
+}

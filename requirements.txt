@@ -1,0 +1,40 @@
+# Core dependencies
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.6.0
+httpx==0.26.0
+websockets==12.0
+aioredis==2.0.1
+asyncpg==0.29.0
+
+# MCP dependencies - using compatible alternatives
+websocket-client==1.7.0
+jsonrpclib-pelix==0.4.3.2
+
+# AI/ML dependencies
+openai==1.12.0
+anthropic==0.18.0
+# langchain==0.1.0  # Comentado temporalmente para evitar conflictos
+# transformers==4.36.0  # Comentado temporalmente para evitar conflictos
+
+# CLI dependencies
+click==8.1.7
+rich==13.7.0
+prompt-toolkit==3.0.43
+
+# Web UI dependencies
+jinja2==3.1.2
+aiofiles==23.2.1
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1
+toml==0.10.2
+cryptography>=42.0.0
+PyJWT==2.8.0
+
+# Development
+pytest==8.0.0
+pytest-asyncio==0.23.0
+black==24.1.0
+flake8==7.0.0
