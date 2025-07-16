@@ -55,22 +55,36 @@ TESTIA/
 4. **Acceder Web UI**:
    - Abrir http://localhost:8080
 
-## Configuración de Modelos Custom
+## Configuración de Modelos
 
-Edita `config/models.json` para agregar tus modelos:
+Los modelos disponibles se definen en `models.config.json`. Cada entrada
+incluye:
+  - `provider`: nombre del servicio o tipo de modelo
+  - `api_key`: credencial asociada (opcional)
+  - `endpoint`: URL o ruta local del modelo
+  - `parameters`: configuración de temperatura, máximo de tokens, etc.
+
+Ejemplo con dos proveedores:
 
 ```json
 {
   "models": {
-    "custom-gpt": {
+    "gpt-4": {
       "provider": "openai",
-      "model": "gpt-4",
       "api_key": "${OPENAI_API_KEY}",
-      "instructions": "Eres un asistente especializado..."
+      "endpoint": "https://api.openai.com/v1",
+      "parameters": {"temperature": 0.7, "max_tokens": 4000}
+    },
+    "local-llama": {
+      "provider": "custom",
+      "endpoint": "http://localhost:11434/v1",
+      "parameters": {"temperature": 0.7, "max_tokens": 2000}
     }
   }
 }
 ```
+
+Para añadir un nuevo modelo simplemente agrega otra sección siguiendo la misma estructura.
 
 ## MCP Support
 
